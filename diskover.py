@@ -6,7 +6,7 @@ your file metadata into Elasticsearch.
 See README.md or https://github.com/shirosaidev/diskover
 for more information.
 
-Copyright (C) Chris Park 2017-2018
+Copyright (C) Chris Park 2017-2019
 diskover is released under the Apache 2.0 license. See
 LICENSE for the full license text.
 """
@@ -29,7 +29,7 @@ except ImportError:
 import progressbar
 import argparse
 import logging
-import imp
+import importlib
 import time
 import math
 import re
@@ -38,7 +38,7 @@ import sys
 import json
 
 
-version = '1.5.0-rc29'
+version = '1.5.0.9'
 __version__ = version
 
 IS_PY3 = sys.version_info >= (3, 0)
@@ -189,7 +189,10 @@ def load_config():
             configsettings['ownersgroups_keepdomain'] = "false"
         try:
             t = config.get('autotag', 'files')
-            atf = json.loads(t)
+            if os.path.isfile("%s/%s" % (os.getcwd(),t)):
+                atf = json.loads(open("%s/%s" % (os.getcwd(),t)).read())
+            else:
+                atf = json.loads(t)
             configsettings['autotag_files'] = atf
         except ValueError as e:
             raise ValueError("Error in config autotag files: %s" % e)
@@ -197,40 +200,15 @@ def load_config():
             configsettings['autotag_files'] = []
         try:
             t = config.get('autotag', 'dirs')
-            atd = json.loads(t)
+            if os.path.isfile("%s/%s" % (os.getcwd(),t)):
+                atd = json.loads(open("%s/%s" % (os.getcwd(),t)).read())
+            else:
+                atd = json.loads(t)
             configsettings['autotag_dirs'] = atd
         except ValueError as e:
             raise ValueError("Error in config autotag dirs: %s" % e)
         except ConfigParser.NoOptionError:
             configsettings['autotag_dirs'] = []
-        try:
-            configsettings['costpergb'] = float(config.get('storagecost', 'costpergb'))
-        except ConfigParser.NoOptionError:
-            configsettings['costpergb'] = 0.03
-        try:
-            configsettings['costpergb_base'] = int(config.get('storagecost', 'base'))
-        except ConfigParser.NoOptionError:
-            configsettings['costpergb_base'] = 2
-        try:
-            s = config.get('storagecost', 'paths')
-            scp = json.loads(s)
-            configsettings['costpergb_paths'] = scp
-        except ValueError as e:
-            raise ValueError("Error in config storagecost paths: %s" % e)
-        except ConfigParser.NoOptionError:
-            configsettings['costpergb_paths'] = []
-        try:
-            s = config.get('storagecost', 'times')
-            sct = json.loads(s)
-            configsettings['costpergb_times'] = sct
-        except ValueError as e:
-            raise ValueError("Error in config storagecost times: %s" % e)
-        except ConfigParser.NoOptionError:
-            configsettings['costpergb_times'] = []
-        try:
-            configsettings['costpergb_priority'] = config.get('storagecost', 'priority')
-        except ConfigParser.NoOptionError:
-            configsettings['costpergb_priority'] = "path"
         try:
             configsettings['aws'] = config.get('elasticsearch', 'aws').lower()
         except ConfigParser.NoOptionError:
@@ -318,14 +296,6 @@ def load_config():
         except ConfigParser.NoOptionError:
             configsettings['redis_password'] = ""
         try:
-            configsettings['redis_cachedirtimes'] = config.get('redis', 'cachedirtimes').lower()
-        except ConfigParser.NoOptionError:
-            configsettings['redis_cachedirtimes'] = "false"
-        try:
-            configsettings['redis_dirtimesttl'] = int(config.get('redis', 'dirtimesttl'))
-        except ConfigParser.NoOptionError:
-            configsettings['redis_dirtimesttl'] = 604800
-        try:
             configsettings['redis_db'] = int(config.get('redis', 'db'))
         except ConfigParser.NoOptionError:
             configsettings['redis_db'] = 0
@@ -410,33 +380,25 @@ def load_config():
         except ConfigParser.NoOptionError:
             configsettings['dupes_threads'] = 8
         try:
-            configsettings['crawlbot_botsleep'] = float(config.get('crawlbot', 'sleeptime'))
-        except ConfigParser.NoOptionError:
-            configsettings['crawlbot_botsleep'] = 0.1
-        try:
-            configsettings['crawlbot_botthreads'] = int(config.get('crawlbot', 'botthreads'))
-        except ConfigParser.NoOptionError:
-            configsettings['crawlbot_botthreads'] = 8
-        try:
-            configsettings['crawlbot_dirlisttime'] = int(config.get('crawlbot', 'dirlisttime'))
-        except ConfigParser.NoOptionError:
-            configsettings['crawlbot_dirlisttime'] = 3600
-        try:
             configsettings['gource_maxfilelag'] = float(config.get('gource', 'maxfilelag'))
         except ConfigParser.NoOptionError:
             configsettings['gource_maxfilelag'] = 5
         try:
-            configsettings['qumulo_host'] = config.get('qumulo', 'cluster')
+            configsettings['api_url'] = config.get('crawlapi', 'url')
         except ConfigParser.NoOptionError:
-            configsettings['qumulo_host'] = ""
+            configsettings['api_url'] = ""
         try:
-            configsettings['qumulo_api_user'] = config.get('qumulo', 'api_user')
+            configsettings['api_user'] = config.get('crawlapi', 'user')
         except ConfigParser.NoOptionError:
-            configsettings['qumulo_api_user'] = ""
+            configsettings['api_user'] = ""
         try:
-            configsettings['qumulo_api_password'] = config.get('qumulo', 'api_password')
+            configsettings['api_password'] = config.get('crawlapi', 'password')
         except ConfigParser.NoOptionError:
-            configsettings['qumulo_api_password'] = ""
+            configsettings['api_password'] = ""
+        try:
+            configsettings['api_pagesize'] = config.get('crawlapi', 'pagesize')
+        except ConfigParser.NoOptionError:
+            configsettings['api_pagesize'] = ""
     except ConfigParser.NoSectionError as e:
         print('Missing section from diskover.cfg, check diskover.cfg.sample and copy over, exiting. (%s)' % e)
         sys.exit(1)
@@ -458,8 +420,12 @@ def get_plugins_info():
         if not os.path.isdir(location) or not main_module + ".py" \
                 in os.listdir(location):
             continue
-        info = imp.find_module(main_module, [location])
-        plugins_info.append({"name": i, "info": info})
+        if IS_PY3:
+            spec = importlib.machinery.PathFinder().find_spec(main_module, [location])
+        else:
+            import imp
+            spec = imp.find_module(main_module, [location])
+        plugins_info.append({"name": i, "spec": spec})
     return plugins_info
 
 
@@ -470,7 +436,12 @@ def load_plugins():
     loaded_plugins = []
     plugins_info = get_plugins_info()
     for plugin_info in plugins_info:
-        plugin_module = imp.load_module(plugin_info["name"], *plugin_info["info"])
+        if IS_PY3:
+            plugin_module = importlib.util.module_from_spec(plugin_info["spec"])
+            plugin_info["spec"].loader.exec_module(plugin_module)
+        else:
+            import imp
+            plugin_module = imp.load_module(plugin_info["name"], *plugin_info["spec"])
         loaded_plugins.append(plugin_module)
     return loaded_plugins
 
@@ -485,6 +456,25 @@ def list_plugins():
         print(plugin_info["name"])
 
 
+def user_prompt(question):
+    """ Prompt the yes/no-*question* to the user. """
+    from distutils.util import strtobool
+
+    while True:
+        try:
+            if IS_PY3:
+                user_input = input(question + " [y/n]: ").lower()
+            else:
+                user_input = raw_input(question + " [y/n]: ").lower()
+            result = strtobool(user_input)
+            return result
+        except ValueError:
+            print("Please use y/n or yes/no.\n")
+        except KeyboardInterrupt:
+            print("Ctrl-c keyboard interrupt, shutting down...")
+            sys.exit(0)
+
+
 def index_create(indexname):
     """This is the es index create function.
     It checks for existing index and deletes if
@@ -494,230 +484,222 @@ def index_create(indexname):
     logger.info('Checking es index: %s', indexname)
     # check for existing es index
     if es.indices.exists(index=indexname):
-        # check if crawlbot or reindex cli argument and don't delete existing index
+        # check if reindex cli argument and don't delete existing index
         if cliargs['reindex']:
             logger.info('Reindexing (non-recursive, preserving tags)')
             return
         elif cliargs['reindexrecurs']:
             logger.info('Reindexing (recursive, preserving tags)')
             return
-        elif cliargs['crawlbot']:
-            return
         # delete existing index
         else:
-            logger.warning('es index exists, deleting')
-            es.indices.delete(index=indexname, ignore=[400, 404])
+            if cliargs['forcedropexisting']:
+                logger.warning('es index exists, deleting')
+                es.indices.delete(index=indexname, ignore=[400, 404])
+            else:
+                if user_prompt("Drop existing index?"):
+                    logger.warning('es index exists, deleting')
+                    es.indices.delete(index=indexname, ignore=[400, 404])
+                else:
+                    logger.info("Cannot continue with index. Exiting.")
+                    sys.exit(1)
+
     # set up es index mappings and create new index
-    if cliargs['qumulo']:
-        from diskover_qumulo import get_qumulo_mappings
-        mappings = get_qumulo_mappings(config)
-    elif cliargs['s3']:
-        from diskover_s3 import get_s3_mappings
-        mappings = get_s3_mappings(config)
-    else:
-        mappings = {
-            "settings": {
-                "index" : {
-                    "number_of_shards": config['index_shards'],
-                    "number_of_replicas": config['index_replicas']
+    mappings = {
+        "settings": {
+            "index" : {
+                "number_of_shards": config['index_shards'],
+                "number_of_replicas": config['index_replicas']
+            }
+        },
+        "mappings": {
+            "diskspace": {
+                "properties": {
+                    "path": {
+                        "type": "keyword"
+                    },
+                    "total": {
+                        "type": "long"
+                    },
+                    "used": {
+                        "type": "long"
+                    },
+                    "free": {
+                        "type": "long"
+                    },
+                    "available": {
+                        "type": "long"
+                    },
+                    "indexing_date": {
+                        "type": "date"
+                    }
                 }
             },
-            "mappings": {
-                "diskspace": {
-                    "properties": {
-                        "path": {
-                            "type": "keyword"
-                        },
-                        "total": {
-                            "type": "long"
-                        },
-                        "used": {
-                            "type": "long"
-                        },
-                        "free": {
-                            "type": "long"
-                        },
-                        "available": {
-                            "type": "long"
-                        },
-                        "indexing_date": {
-                            "type": "date"
-                        }
+            "crawlstat": {
+                "properties": {
+                    "path": {
+                        "type": "keyword"
+                    },
+                    "state": {
+                        "type": "text"
+                    },
+                    "crawl_time": {
+                        "type": "float"
+                    },
+                    "indexing_date": {
+                        "type": "date"
                     }
-                },
-                "crawlstat": {
-                    "properties": {
-                        "path": {
-                            "type": "keyword"
-                        },
-                        "state": {
-                            "type": "text"
-                        },
-                        "crawl_time": {
-                            "type": "float"
-                        },
-                        "indexing_date": {
-                            "type": "date"
-                        }
+                }
+            },
+            "worker": {
+                "properties": {
+                    "worker_name": {
+                        "type": "keyword"
+                    },
+                    "dir_count": {
+                        "type": "integer"
+                    },
+                    "file_count": {
+                        "type": "integer"
+                    },
+                    "bulk_time": {
+                        "type": "float"
+                    },
+                    "crawl_time": {
+                        "type": "float"
+                    },
+                    "indexing_date": {
+                        "type": "date"
                     }
-                },
-                "worker": {
-                    "properties": {
-                        "worker_name": {
-                            "type": "keyword"
-                        },
-                        "dir_count": {
-                            "type": "integer"
-                        },
-                        "file_count": {
-                            "type": "integer"
-                        },
-                        "bulk_time": {
-                            "type": "float"
-                        },
-                        "crawl_time": {
-                            "type": "float"
-                        },
-                        "indexing_date": {
-                            "type": "date"
-                        }
+                }
+            },
+            "directory": {
+                "properties": {
+                    "filename": {
+                        "type": "keyword"
+                    },
+                    "path_parent": {
+                        "type": "keyword"
+                    },
+                    "filesize": {
+                        "type": "long"
+                    },
+                    "items": {
+                        "type": "long"
+                    },
+                    "items_files": {
+                        "type": "long"
+                    },
+                    "items_subdirs": {
+                        "type": "long"
+                    },
+                    "owner": {
+                        "type": "keyword"
+                    },
+                    "group": {
+                        "type": "keyword"
+                    },
+                    "last_modified": {
+                        "type": "date"
+                    },
+                    "last_access": {
+                        "type": "date"
+                    },
+                    "last_change": {
+                        "type": "date"
+                    },
+                    "hardlinks": {
+                        "type": "integer"
+                    },
+                    "inode": {
+                        "type": "keyword"
+                    },
+                    "tag": {
+                        "type": "keyword"
+                    },
+                    "tag_custom": {
+                        "type": "keyword"
+                    },
+                    "crawl_time": {
+                        "type": "float"
+                    },
+                    "change_percent_filesize": {
+                        "type": "float"
+                    },
+                    "change_percent_items": {
+                        "type": "float"
+                    },
+                    "change_percent_items_files": {
+                        "type": "float"
+                    },
+                    "change_percent_items_subdirs": {
+                        "type": "float"
+                    },
+                    "worker_name": {
+                        "type": "keyword"
+                    },
+                    "indexing_date": {
+                        "type": "date"
                     }
-                },
-                "directory": {
-                    "properties": {
-                        "filename": {
-                            "type": "keyword"
-                        },
-                        "path_parent": {
-                            "type": "keyword"
-                        },
-                        "filesize": {
-                            "type": "long"
-                        },
-                        "items": {
-                            "type": "long"
-                        },
-                        "items_files": {
-                            "type": "long"
-                        },
-                        "items_subdirs": {
-                            "type": "long"
-                        },
-                        "owner": {
-                            "type": "keyword"
-                        },
-                        "group": {
-                            "type": "keyword"
-                        },
-                        "last_modified": {
-                            "type": "date"
-                        },
-                        "last_access": {
-                            "type": "date"
-                        },
-                        "last_change": {
-                            "type": "date"
-                        },
-                        "hardlinks": {
-                            "type": "integer"
-                        },
-                        "inode": {
-                            "type": "keyword"
-                        },
-                        "tag": {
-                            "type": "keyword"
-                        },
-                        "tag_custom": {
-                            "type": "keyword"
-                        },
-                        "crawl_time": {
-                            "type": "float"
-                        },
-                        "change_percent_filesize": {
-                            "type": "float"
-                        },
-                        "change_percent_items": {
-                            "type": "float"
-                        },
-                        "change_percent_items_files": {
-                            "type": "float"
-                        },
-                        "change_percent_items_subdirs": {
-                            "type": "float"
-                        },
-                        "costpergb": {
-                            "type": "scaled_float",
-                            "scaling_factor": 100
-                        },
-                        "worker_name": {
-                            "type": "keyword"
-                        },
-                        "indexing_date": {
-                            "type": "date"
-                        }
-                    }
-                },
-                "file": {
-                    "properties": {
-                        "filename": {
-                            "type": "keyword"
-                        },
-                        "extension": {
-                            "type": "keyword"
-                        },
-                        "path_parent": {
-                            "type": "keyword"
-                        },
-                        "filesize": {
-                            "type": "long"
-                        },
-                        "owner": {
-                            "type": "keyword"
-                        },
-                        "group": {
-                            "type": "keyword"
-                        },
-                        "last_modified": {
-                            "type": "date"
-                        },
-                        "last_access": {
-                            "type": "date"
-                        },
-                        "last_change": {
-                            "type": "date"
-                        },
-                        "hardlinks": {
-                            "type": "integer"
-                        },
-                        "inode": {
-                            "type": "keyword"
-                        },
-                        "filehash": {
-                            "type": "keyword"
-                        },
-                        "tag": {
-                            "type": "keyword"
-                        },
-                        "tag_custom": {
-                            "type": "keyword"
-                        },
-                        "dupe_md5": {
-                            "type": "keyword"
-                        },
-                        "costpergb": {
-                            "type": "scaled_float",
-                            "scaling_factor": 100
-                        },
-                        "worker_name": {
-                            "type": "keyword"
-                        },
-                        "indexing_date": {
-                            "type": "date"
-                        }
+                }
+            },
+            "file": {
+                "properties": {
+                    "filename": {
+                        "type": "keyword"
+                    },
+                    "extension": {
+                        "type": "keyword"
+                    },
+                    "path_parent": {
+                        "type": "keyword"
+                    },
+                    "filesize": {
+                        "type": "long"
+                    },
+                    "owner": {
+                        "type": "keyword"
+                    },
+                    "group": {
+                        "type": "keyword"
+                    },
+                    "last_modified": {
+                        "type": "date"
+                    },
+                    "last_access": {
+                        "type": "date"
+                    },
+                    "last_change": {
+                        "type": "date"
+                    },
+                    "hardlinks": {
+                        "type": "integer"
+                    },
+                    "inode": {
+                        "type": "keyword"
+                    },
+                    "filehash": {
+                        "type": "keyword"
+                    },
+                    "tag": {
+                        "type": "keyword"
+                    },
+                    "tag_custom": {
+                        "type": "keyword"
+                    },
+                    "dupe_md5": {
+                        "type": "keyword"
+                    },
+                    "worker_name": {
+                        "type": "keyword"
+                    },
+                    "indexing_date": {
+                        "type": "date"
                     }
                 }
             }
         }
+    }
 
     # check plugins for additional mappings
     for plugin in plugins:
@@ -899,7 +881,7 @@ def index_get_docs(cliargs, logger, doctype='directory', copytags=False, hotdirs
     if pathid is True, will return dict with path and their id.
     """
 
-    data = _index_get_docs_data(index, cliargs, logger, doctype=doctype, path=path, 
+    data = _index_get_docs_data(index, cliargs, logger, doctype=doctype, path=path,
                                 maxdepth=maxdepth, sort=sort)
 
     # refresh index
@@ -1050,7 +1032,7 @@ def add_diskspace(index, logger, path):
         total_bytes = ctypes.c_ulonglong(0)
         free_bytes = ctypes.c_ulonglong(0)
         available_bytes = ctypes.c_ulonglong(0)
-        ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p(path), 
+        ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p(path),
             ctypes.pointer(available_bytes),
             ctypes.pointer(total_bytes),
             ctypes.pointer(free_bytes))
@@ -1155,10 +1137,11 @@ def escape_chars(text):
     """This is the escape special characters function.
     It returns escaped path strings for es queries.
     """
-    # escape any backslace characters
+    # escape any backslash chars
     text = text.replace('\\', '\\\\')
     # escape any characters in chr_dict
-    chr_dict = {'/': '\\/', '(': '\\(', ')': '\\)', '[': '\\[', ']': '\\]', '$': '\\$',
+    chr_dict = {'\n': '\\n', '\t': '\\t',
+                '/': '\\/', '(': '\\(', ')': '\\)', '[': '\\[', ']': '\\]', '$': '\\$',
                 ' ': '\\ ', '&': '\\&', '<': '\\<', '>': '\\>', '+': '\\+', '-': '\\-',
                 '|': '\\|', '!': '\\!', '{': '\\{', '}': '\\}', '^': '\\^', '~': '\\~',
                 '?': '\\?', ':': '\\:', '=': '\\=', '\'': '\\\'', '"': '\\"', '@': '\\@',
@@ -1213,9 +1196,6 @@ def parse_cli_args(indexname):
                         help="Index empty directories (default: don't index)")
     parser.add_argument("-i", "--index", default=indexname,
                         help="Elasticsearch index name (default: from config)")
-    parser.add_argument("-I", "--index2", metavar='INDEX2', nargs=1,
-                        help="Compare directory times with previous index to get metadata \
-                            from index2 instead of off disk (requires cached dir times in Redis)")
     parser.add_argument("-M", "--maxdepth", type=int, default=None,
                         help="Maximum directory depth to crawl (default: None)")
     parser.add_argument("-c", "--maxdcdepth", type=int, default=None,
@@ -1228,8 +1208,6 @@ def parse_cli_args(indexname):
                         help="Number of threads for treewalk (default: cpu core count x 2)")
     parser.add_argument("-A", "--autotag", action="store_true",
                         help="Get bots to auto-tag files/dirs based on patterns in config")
-    parser.add_argument("-G", "--costpergb", action="store_true",
-                        help="Store cost per GB in files/dirs based on cost and patterns in config")
     parser.add_argument("-S", "--sizeondisk", action="store_true",
                         help="Store size on disk (disk usage size) using block count x blocksize instead of file size")
     parser.add_argument("-B", "--blocksize", type=int, metavar='BLOCKSIZE', default=512,
@@ -1240,6 +1218,8 @@ def parse_cli_args(indexname):
                         help="Reindex directory (non-recursive), data is added to existing index")
     parser.add_argument("-R", "--reindexrecurs", action="store_true",
                         help="Reindex directory and all subdirs (recursive), data is added to existing index")
+    parser.add_argument("-F", "--forcedropexisting", action="store_true",
+                        help="Silently drop an existing index (if present)")
     parser.add_argument("-D", "--finddupes", action="store_true",
                         help="Find duplicate files in existing index and update their dupe_md5 field")
     parser.add_argument("-C", "--copytags", metavar='INDEX2',
@@ -1257,12 +1237,10 @@ def parse_cli_args(indexname):
                         help="Don't include files in batch sent to bots, only send dirs, bots scan for files")
     parser.add_argument("--replacepath", nargs=2, metavar="PATH",
                         help="Replace path, example: --replacepath Z:\\ /mnt/share/")
-    parser.add_argument("--crawlbot", action="store_true",
-                        help="Starts up crawl bot continuous scanner to scan for dir changes in index")
-    parser.add_argument("--qumulo", action="store_true",
-                        help="Qumulo storage type, use Qumulo api instead of scandir")
-    parser.add_argument("--s3", metavar='FILE', nargs='+',
-                        help="Import AWS S3 inventory csv file(s) (gzipped) to diskover index")
+    parser.add_argument("--crawlapi", action="store_true",
+                        help="Use storage Restful API instead of scandir")
+    parser.add_argument("--storagent", metavar='HOST', nargs='+',
+                        help="Use diskover Storage Agent instead of scandir")
     parser.add_argument("--dircalcsonly", action="store_true",
                         help="Calculate sizes and item counts for each directory doc in existing index \
                                 (done automatically after each crawl)")
@@ -1284,8 +1262,6 @@ def parse_cli_args(indexname):
     args = parser.parse_args()
     if args.index:
         args.index = args.index.lower()
-    if args.index2:
-        args.index2 = args.index2.lower()
     return args
 
 
@@ -1438,18 +1414,17 @@ def calc_dir_sizes(cliargs, logger, path=None):
                 except (ZeroDivisionError, ValueError):
                     bar.update(0)
 
-            del dirlist[:]
             # use es scroll api
             res = es.scroll(scroll_id=res['_scroll_id'], scroll='1m',
                             request_timeout=config['es_timeout'])
-        
+
         # enqueue dir calc job for any remaining in dirlist
         if len(dirlist) > 0:
             q_calc.enqueue(calc_dir_size, args=(dirlist, cliargs,), result_ttl=config['redis_ttl'])
             jobcount += 1
 
         logger.info('Found %s directory docs' % str(dircount))
-        
+
         # set up progress bar with time remaining
         if bar:
             bar.finish()
@@ -1469,7 +1444,7 @@ def calc_dir_sizes(cliargs, logger, path=None):
 
         if bar:
             bar.finish()
-        
+
         elapsed = get_time(time.time() - starttime)
         logger.info('Finished calculating %s directory sizes in %s' % (dircount, elapsed))
 
@@ -1478,28 +1453,66 @@ def calc_dir_sizes(cliargs, logger, path=None):
         sys.exit(0)
 
 
-def scandirwalk_worker(threadn):
+def scandirwalk_worker(threadn, cliargs, logger):
     dirs = []
     nondirs = []
+    # check if we are using storage agent and make connection
+    if cliargs['storagent']:
+        stor_agent = True
+        hostlist = cliargs['storagent']
+        stor_agent_conn = diskover_agent.AgentConnection(hosts=hostlist)
+        stor_agent_conn.connect()
+        if cliargs['debug'] or cliargs['verbose']:
+            logger.info("[thread-%s] Connected to Storage Agent host: %s" % (threadn, stor_agent_conn.conn_host()))
+    else:
+        stor_agent = False
     while True:
         path = q_paths.get()
         try:
             q_paths_in_progress.put(path)
             if cliargs['debug'] or cliargs['verbose']:
                 logger.info("[thread-%s] scandirwalk_worker: %s" % (threadn, path))
-            for entry in scandir(path):
-                if entry.is_dir(follow_symlinks=False) and not dir_excluded(entry.path, config, cliargs):
-                    dirs.append(entry.name)
+            if cliargs['crawlapi']:
+                root, api_dirs, api_nondirs = api_listdir(path, api_ses)
+                path = root
+                for d in api_dirs:
+                    if not dir_excluded(d[0], config, cliargs):
+                        dirs.append(d)
                 if not cliargs['dirsonly']:
-                    if entry.is_file(follow_symlinks=False):
+                    for f in api_nondirs:
+                        nondirs.append(f)
+                del api_dirs[:]
+                del api_nondirs[:]
+            elif stor_agent:
+                # grab dir list from storage agent server
+                dir_list = stor_agent_conn.listdir(path)
+                logger.debug("[thread-%s] scandirwalk_worker: Storage Agent host response time: %s" % (threadn, stor_agent_conn.response_time()))
+                path, dirs_noexcl, nondirs = dir_list
+                for d in dirs_noexcl:
+                    if not dir_excluded(d, config, cliargs):
+                        dirs.append(d)
+            else:
+                item_count = 0
+                for entry in scandir(path):
+                    if entry.is_dir(follow_symlinks=False) and not dir_excluded(entry.path, config, cliargs):
+                        dirs.append(entry.name)
+                    elif entry.is_file(follow_symlinks=False) and not cliargs['dirsonly']:
                         nondirs.append(entry.name)
+                    if item_count == 100000:
+                        if cliargs['debug'] or cliargs['verbose']:
+                            logger.info("[thread-%s] scandirwalk_worker: processing directory with many files: %s" % (threadn, path))
+                    else:
+                        item_count += 1
             q_paths_results.put((path, dirs[:], nondirs[:]))
         except (OSError, IOError) as e:
             logger.warning("[thread-%s] OS/IO Exception caused by: %s" % (threadn, e))
             pass
-        except Exception as e:
-            logger.warning("[thread-%s] Exception caused by: %s" % (threadn, e))
+        except UnicodeDecodeError as e:
+            logger.warning("[thread-%s] Unicode Decode Exception caused by: %s (path: %s)" % (threadn, e, path))
             pass
+        except Exception as e:
+            logger.error("[thread-%s] Exception caused by: %s" % (threadn, e))
+            raise
         finally:
             q_paths_in_progress.get()
         del dirs[:]
@@ -1507,19 +1520,26 @@ def scandirwalk_worker(threadn):
         q_paths.task_done()
 
 
-def scandirwalk(path):
+def scandirwalk(path, cliargs, logger):
     q_paths.put(path)
     while True:
         entry = q_paths_results.get()
         root, dirs, nondirs = entry
         if cliargs['debug'] or cliargs['verbose']:
-            logger.info("scandirwalk: %s (dircount: %s, filecount: %s)" % (root, str(len(dirs)), str(len(nondirs))))
+            if cliargs['crawlapi']:
+                logger.info("apiwalk: %s (dircount: %s, filecount: %s)" % (root[0], str(len(dirs)), str(len(nondirs))))
+            else:
+                logger.info("scandirwalk: %s (dircount: %s, filecount: %s)" % (root, str(len(dirs)), str(len(nondirs))))
         # yield before recursion
         yield root, dirs, nondirs
         # recurse into subdirectories
-        for name in dirs:
-            new_path = os.path.join(root, name)
-            q_paths.put(new_path)
+        if cliargs['crawlapi']:
+            for d in dirs:
+                q_paths.put(d[0])
+        else:
+            for name in dirs:
+                new_path = os.path.join(root, name)
+                q_paths.put(new_path)
         q_paths_results.task_done()
         if q_paths_results.qsize() == 0 and q_paths.qsize() == 0:
             time.sleep(.5)
@@ -1542,7 +1562,7 @@ def treewalk(top, num_sep, level, batchsize, cliargs, logger, reindex_dict):
 
     # set up threads for tree walk
     for i in range(cliargs['walkthreads']):
-        t = Thread(target=scandirwalk_worker, args=(i,))
+        t = Thread(target=scandirwalk_worker, args=(i, cliargs, logger,))
         t.daemon = True
         t.start()
 
@@ -1557,7 +1577,7 @@ def treewalk(top, num_sep, level, batchsize, cliargs, logger, reindex_dict):
         bar = None
 
     bartimestamp = time.time()
-    for root, dirs, files in scandirwalk(top):
+    for root, dirs, files in scandirwalk(top, cliargs, logger):
         dircount += 1
         totaldirs += 1
         files_len = len(files)
@@ -1658,9 +1678,6 @@ def crawl_tree(path, cliargs, logger, reindex_dict):
         if cliargs['sizeondisk']:
             logger.info("Storing on disk size instead of file size using a blocksize of %s (-S)" % cliargs['blocksize'])
 
-        if cliargs['costpergb']:
-            logger.info("Storing cost per GB (-G)")
-
         if cliargs['adaptivebatch']:
             batchsize = ab_start
             cliargs['batchsize'] = batchsize
@@ -1675,8 +1692,8 @@ def crawl_tree(path, cliargs, logger, reindex_dict):
             if batchsize < 50:
                 logger.warning("Using a small batch size can decrease performance")
 
-        # set maxdepth level to 1 if reindex or crawlbot (non-recursive)
-        if cliargs['reindex'] or cliargs['crawlbot']:
+        # set maxdepth level to 1 if reindex
+        if cliargs['reindex']:
             level = 1
             cliargs['maxdepth'] = 1
         else:
@@ -1695,13 +1712,8 @@ def crawl_tree(path, cliargs, logger, reindex_dict):
 
         logger.info("Starting crawl using %s treewalk threads (maxdepth %s)" % (cliargs['walkthreads'], cliargs['maxdepth']))
 
-        # qumulo api crawl
-        if cliargs['qumulo']:
-            from diskover_qumulo import qumulo_treewalk
-            qumulo_treewalk(path, q_crawl, num_sep, level, batchsize, cliargs, logger, reindex_dict)
-        # regular crawl using scandir
-        else:
-            treewalk(path, num_sep, level, batchsize, cliargs, logger, reindex_dict)
+        # start tree walking
+        treewalk(path, num_sep, level, batchsize, cliargs, logger, reindex_dict)
 
         return starttime
 
@@ -1847,7 +1859,7 @@ def post_crawl_tasks():
     add_crawl_stats(es, cliargs['index'], rootdir_path, (time.time() - starttime), "finished_crawl")
 
     # calculate directory sizes and items
-    if cliargs['reindex'] or cliargs['reindexrecurs'] or cliargs['crawlbot']:
+    if cliargs['reindex'] or cliargs['reindexrecurs']:
         calc_path = rootdir_path
     else:
         calc_path = None
@@ -1856,7 +1868,7 @@ def post_crawl_tasks():
     # add elapsed time crawl stat to es
     add_crawl_stats(es, cliargs['index'], rootdir_path, (time.time() - starttime), "finished_dircalc")
 
-    if cliargs['reindex'] or cliargs['reindexrecurs'] or cliargs['crawlbot']:
+    if cliargs['reindex'] or cliargs['reindexrecurs']:
         # wait for worker bots to be idle and all queues are empty
         logger.info('Waiting for diskover worker bots to be done with any jobs in rq...')
         while worker_bots_busy([q, q_crawl, q_calc]):
@@ -1876,15 +1888,11 @@ def pre_crawl_tasks():
     # optimize Elasticsearch index settings for crawling
     tune_es_for_crawl()
 
-    # check if using prev index for metadata
-    if cliargs['index2']:
-        logger.info('Using %s for metadata cache (-I)' % cliargs['index2'][0])
-
     # add disk space info to es index
-    if not cliargs['reindex'] and not cliargs['reindexrecurs'] and not cliargs['crawlbot']:
-        if cliargs['qumulo']:
-            from diskover_qumulo import qumulo_add_diskspace
-            qumulo_add_diskspace(es, cliargs['index'], rootdir_path, qumulo_ip, qumulo_ses, logger)
+    if not cliargs['reindex'] and not cliargs['reindexrecurs']:
+        if cliargs['crawlapi']:
+            from diskover_crawlapi import api_add_diskspace
+            api_add_diskspace(es, cliargs['index'], rootdir_path, api_ses, logger)
         else:
             add_diskspace(cliargs['index'], logger, rootdir_path)
 
@@ -1949,38 +1957,15 @@ if __name__ == "__main__":
         calc_dir_sizes(cliargs, logger)
         sys.exit(0)
 
-    # check index name for Qumulo storage
-    if cliargs['qumulo']:
-        try:
-            if cliargs['index'] == "diskover_qumulo" or \
-                    (cliargs['index'].split('_')[0] != "diskover" and
-                             cliargs['index'].split('_')[1] != "qumulo"):
-                print('Please name your index: diskover_qumulo-<string>')
-                sys.exit(1)
-        except IndexError:
-            print('Please name your index: diskover_qumulo-<string>')
-            sys.exit(1)
-    # check index name for s3 storage
-    elif cliargs['s3']:
-        try:
-            if cliargs['index'] == "diskover_s3" or \
-                    (cliargs['index'].split('_')[0] != "diskover" and
-                             cliargs['index'].split('_')[1] != "s3"):
-                print('Please name your index: diskover_s3-<string>')
-                sys.exit(1)
-        except IndexError:
-            print('Please name your index: diskover_s3-<string>')
-            sys.exit(1)
-    else:
-        try:
-            # check index name
-            if cliargs['index'] == "diskover" or \
-                            cliargs['index'].split('-')[0] != "diskover":
-                print('Please name your index: diskover-<string>')
-                sys.exit(1)
-        except IndexError:
+    try:
+        # check index name
+        if cliargs['index'] == "diskover" or \
+                        cliargs['index'].split('-')[0] != "diskover":
             print('Please name your index: diskover-<string>')
             sys.exit(1)
+    except IndexError:
+        print('Please name your index: diskover-<string>')
+        sys.exit(1)
 
     # check for listen socket cli flag to start socket server
     if cliargs['listen']:
@@ -2041,67 +2026,26 @@ if __name__ == "__main__":
         logger.info("Plugins loaded: %s", plugins_list)
 
     # check if rootdir exists
-    if cliargs['qumulo']:
-        if IS_PY3:
-            print('Python 3 not supported using --qumulo, please use Python 2.7.')
-            sys.exit(0)
+    if cliargs['crawlapi']:
         if cliargs['rootdir'] == '.' or cliargs['rootdir'] == "":
             logger.error("Rootdir path missing, use -d /rootdir, exiting")
             sys.exit(1)
-        from diskover_qumulo import qumulo_connection, qumulo_get_file_attr
-        logger.info('Connecting to Qumulo storage api... (--qumulo)')
-        qumulo_ip, qumulo_ses = qumulo_connection()
-        logger.info('Connected to Qumulo api at %s' % qumulo_ip)
-        # check using qumulo api
+        from diskover_crawlapi import api_connection, api_stat, api_listdir
+        logger.info('Connecting to file system storage api at %s... (--crawlapi)' % config['api_url'])
+        api_ses = api_connection()
+        logger.info('Connected to storage api')
+        # check using storage api
         try:
-            qumulo_get_file_attr(cliargs['rootdir'], qumulo_ip, qumulo_ses)
-        except ValueError:
-            logger.error("Rootdir path not found or not a directory, exiting")
+            api_stat(cliargs['rootdir'], api_ses)
+        except ValueError as e:
+            logger.error("Rootdir path not found or not a directory, exiting (%s)" % e)
             sys.exit(1)
-    elif cliargs['s3']:
-        # ingest s3 inventory files
-        from diskover_s3 import start_importing
-        rootdir_path = '/'
-        cliargs['rootdir'] = rootdir_path
-        logger.debug('Excluded dirs: %s', config['excluded_dirs'])
-        logger.debug('Inventory files: %s', cliargs['s3'])
-
-        # warn if indexing 0 Byte empty files
-        if cliargs['minsize'] == 0:
-            logger.warning('You are indexing 0 Byte empty files (-s 0)')
-
-        # create Elasticsearch index
-        index_create(cliargs['index'])
-
-        # add crawl stat to index
-        add_crawl_stats(es, cliargs['index'], rootdir_path, 0, "running")
-
-        # optimize Elasticsearch index settings for crawling
-        tune_es_for_crawl()
-
-        starttime = time.time()
-
-        # start importing
-        start_importing(es, cliargs, logger)
-
-        # add elapsed time crawl stat to es
-        add_crawl_stats(es, cliargs['index'], rootdir_path, (time.time() - starttime), "finished_crawl")
-
-        # calculate directory sizes and items
-        calc_dir_sizes(cliargs, logger)
-
-        add_crawl_stats(es, cliargs['index'], rootdir_path, (time.time() - starttime), "finished_dircalc")
-
-        # wait for worker bots to be idle and all queues are empty
-        logger.info('Waiting for diskover worker bots to be done with any jobs in rq...')
-        while worker_bots_busy([q, q_crawl, q_calc]):
-            time.sleep(1)
-
-        # set Elasticsearch index settings back to default
-        tune_es_for_crawl(defaults=True)
-
-        logger.info('Done importing S3 inventory files! Sayonara!')
-        sys.exit(0)
+    elif cliargs['storagent']:
+        try:
+            import diskover_agent
+        except ImportError:
+            logger.error("Missing diskover_agent.py module, exiting")
+            sys.exit(1)
     else:
         # warn if not running as root (linux) or Administrator (windows)
         try:
@@ -2143,15 +2087,6 @@ if __name__ == "__main__":
         reindex_dict = index_delete_path(rootdir_path, cliargs, logger, reindex_dict)
     elif cliargs['reindexrecurs']:
         reindex_dict = index_delete_path(rootdir_path, cliargs, logger, reindex_dict, recursive=True)
-
-    # start crawlbot if cli argument
-    if cliargs['crawlbot']:
-        from diskover_crawlbot import start_crawlbot_scanner
-        wait_for_worker_bots(logger)
-        botdirlist = index_get_docs(cliargs, logger, doctype='directory', index=cliargs['index'])
-        # Set up worker threads for crawlbot
-        start_crawlbot_scanner(cliargs, logger, rootdir_path, botdirlist, reindex_dict)
-        sys.exit(0)
 
     pre_crawl_tasks()
 

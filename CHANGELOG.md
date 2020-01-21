@@ -1,5 +1,80 @@
 # Diskover Change Log
 
+# [1.5.0.9] - 2019-11-15
+### fixed
+- error with plugins and Python 2
+
+# [1.5.0.8] - 2019-11-03
+### fixed
+- bug with finddupes not finding any filehashes
+
+# [1.5.0.7] - 2019-09-27
+### added
+- -L --listen cli arg to diskover worker bot to override what redis rq to listen to
+- additional crawl options for diskover socket server "crawl" command (see wiki for more info)
+- improved duplicate file finding --finddupes
+- reduced time to calculate directory sizes
+### changed
+- replaced imp module with importlib for plugins
+- removed s3 inventory import feature (enterprise ver only feature)
+- removed -I index2 Redis dir cacheing and config entries in diskover.cfg.sample (enterprise ver only feature)
+- removed -G cost per gb (storage costs) and config entries in diskover.cfg.sample (enterprise ver only feature)
+- removed crawl bot continuous scanner and config entries in diskover.cfg.sample (enterprise ver only feature)
+### fixed
+- thread exhaustion from too many spawned threads when running finddupes
+
+# [1.5.0.6] - 2019-08-07
+### changed
+- newer versions of py modules in requirements.txt, update with "pip install -r requirements.txt"
+- new version of killredisconn.py - fixed zombie idle worker connections not getting removed from Redis
+- diskover-bot-launcher.sh v.1.6.3
+### fixed
+- requests dependency warning supported version for urllib3 in lsio docker hub image
+- user_prompt error when asking to overwrite index in Python 2
+- SyntaxError: invalid syntax user_prompt function error when starting bots using Python 2
+
+# [1.5.0.5] - 2019-07-31
+### added
+- diskover Storage Agent support with new --storagent cli option (see https://github.com/shirosaidev/diskover-storage-agent)
+- log output if one of the tree walk threads is scanning a directory with many files
+### changed
+- optimized tree walk code
+
+# [1.5.0.4] - 2019-07-24
+### changed
+- unicode decode path error will now print warning instead of diskover tree walk thread raising an error and stopping
+
+# [1.5.0.3] - 2019-07-23
+### added
+- diskover-bot-launcher.sh version 1.6.2 - added bot start check and check for .py file paths (config settings at top of .sh file)
+### changed
+- select indices page now shows any index still being built status in drop down list
+### fixed
+- dir calc issues with newline "\n" characters in paths
+
+# [1.5.0.2] - 2019-07-03
+### changed
+- version increase to match diskover-web updates
+
+# [1.5.0.1] - 2019-07-02
+### changed
+- ended release candidate (rc) ver
+
+## [1.5.0-rc30] = 2019-06-20
+### added
+- crawl api to allow diskover to crawl file system apis (see diskover github wiki for usage instructions)
+- crawlapi section to diskover.cfg.sample, copy to your diskover.cfg
+- --crawlapi flag to diskover.py
+- optional usage of json files for storagecost and autotag definitions (see diskover.cfg.sample and wiki for how to) (@mathse)
+- cli option -F --forcedropexisting to silenty drop existing index (@fake-name)
+### changed
+- user prompt before deleting existing index (@fake-name)
+- removed qumulo section from diskover.cfg.sample, remove from your config as is no longer used
+- removed diskover_qumulo.py and all code references in diskover (future will add as addon/plugin to new crawl api)
+### fixed
+- indexing a small number of directories would cause dir sizes to not get calculated
+- NameError exception when running --crawlbot continuous scanner mode
+
 ## [1.5.0-rc29] = 2019-01-30
 ### added
 - faster finddupes

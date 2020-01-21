@@ -6,7 +6,7 @@ your file metadata into Elasticsearch.
 See README.md or https://github.com/shirosaidev/diskover
 for more information.
 
-Copyright (C) Chris Park 2017-2018
+Copyright (C) Chris Park 2017-2019
 diskover is released under the Apache 2.0 license. See
 LICENSE for the full license text.
 """
@@ -324,6 +324,18 @@ def run_command(threadnum, command_dict, clientsock, cliargs, logger):
     except KeyError:
         index = str(config['index'])
         pass
+    # try to get min days mtime from command or use default
+    try:
+        mtime = str(command_dict['mtime'])
+    except KeyError:
+        mtime = str(cliargs['mtime'])
+        pass
+    # try to get min size from command or use default
+    try:
+        minsize = str(command_dict['minsize'])
+    except KeyError:
+        minsize = str(cliargs['minsize'])
+        pass
     # try to get worker batch size from command or use default
     try:
         batchsize = str(command_dict['batchsize'])
@@ -336,6 +348,24 @@ def run_command(threadnum, command_dict, clientsock, cliargs, logger):
     except KeyError:
         adaptivebatch = str(cliargs['adaptivebatch'])
         pass
+    # try to get optimize index option from command or use default
+    try:
+        optimizeindex = str(command_dict['optimizeindex'])
+    except KeyError:
+        optimizeindex = str(cliargs['optimizeindex'])
+        pass
+    # try to get auto tag option from command or use default
+    try:
+        autotag = str(command_dict['autotag'])
+    except KeyError:
+        autotag = str(cliargs['autotag'])
+        pass
+    # try to get empty dirs option from command or use default
+    try:
+        indexemptydirs = str(command_dict['indexemptydirs'])
+    except KeyError:
+        indexemptydirs = str(cliargs['indexemptydirs'])
+        pass
 
     try:
         action = command_dict['action']
@@ -346,16 +376,17 @@ def run_command(threadnum, command_dict, clientsock, cliargs, logger):
         if action == 'crawl':
             path = command_dict['path']
             cmd = [pythonpath, diskoverpath, '-b', batchsize,
-                   '-i', index, '-d', path, '-q']
+                   '-i', index, '-d', path, '-m', mtime, '-s', minsize,
+                   '-q', '-F']
 
         elif action == 'finddupes':
             cmd = [pythonpath, diskoverpath, '-b', batchsize,
-                   '-i', index, '--finddupes', '-q']
+                   '-i', index, '--finddupes', '-q', '-F']
 
         elif action == 'hotdirs':
             index2 = str(command_dict['index2'])
             cmd = [pythonpath, diskoverpath, '-b', batchsize,
-                   '-i', index, '--hotdirs', index2, '-q']
+                   '-i', index, '--hotdirs', index2, '-q', '-F']
 
         elif action == 'reindex':
             try:
@@ -366,10 +397,10 @@ def run_command(threadnum, command_dict, clientsock, cliargs, logger):
             path = command_dict['path']
             if recursive == 'true':
                 cmd = [pythonpath, diskoverpath, '-b', batchsize,
-                    '-i', index, '-d', path, '-R', '-q']
+                    '-i', index, '-d', path, '-R', '-q', '-F']
             else:
                 cmd = [pythonpath, diskoverpath, '-b', batchsize,
-                    '-i', index, '-d', path, '-r', '-q']
+                    '-i', index, '-d', path, '-r', '-q', '-F']
 
         elif action == 'updatedirsizes':
             try:
@@ -379,11 +410,11 @@ def run_command(threadnum, command_dict, clientsock, cliargs, logger):
                 pass
             if recursive == 'true':
                 cmd = [pythonpath, diskoverpath, '-b', batchsize,
-                       '-i', index, '--dircalcsonly', '-q']
+                       '-i', index, '--dircalcsonly', '-q', '-F']
             else:
                 path = command_dict['path']
                 cmd = [pythonpath, diskoverpath, '-b', batchsize,
-                       '-i', index, '-d', path, '--dircalcsonly', '--maxdcdepth', '0', '-q']
+                       '-i', index, '-d', path, '--dircalcsonly', '--maxdcdepth', '0', '-q', '-F']
 
         elif action == 'kill':
             taskid = command_dict['taskid']
@@ -403,6 +434,18 @@ def run_command(threadnum, command_dict, clientsock, cliargs, logger):
         # add adaptive batch
         if (adaptivebatch == "True" or adaptivebatch == "true"):
             cmd.append('-a')
+
+        # add optimize index
+        if (optimizeindex == "True" or optimizeindex == "true"):
+            cmd.append('-O')
+
+        # add auto tags
+        if (autotag == "True" or autotag == "true"):
+            cmd.append('-A')
+
+        # add index empty dirs
+        if (indexemptydirs == "True" or indexemptydirs == "true"):
+            cmd.append('-e')
 
         # run command using subprocess
         starttime = time.time()
